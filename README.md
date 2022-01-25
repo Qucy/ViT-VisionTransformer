@@ -23,7 +23,7 @@ Transformer achieved a huge successful in NLP but still not widely used in compu
 
 ViT achieve a comparable performance with ResNet, below image depicting accuracy on different dataset.
 
-![vit_results](https://github.com/Qucy/ViT-VisionTransformer\img\vit_results.jpg)
+![vit_results](https://github.com/Qucy/ViT-VisionTransformer/blob/master/img/vit_results.jpg)
 
 - datasets: ImageNet, CIFAR, Oxford and Google private datasets JFT(20~30 time compared with ImageNet)
 - ViT-H/14: ViT-Huge model, input sequence is 14x14
