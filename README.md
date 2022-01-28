@@ -59,17 +59,114 @@ After we split one image into small patches, then we going flatten width and hei
 
 Source code is as below
 
-....
+```python
+class ClassToken(layers.Layer):
+    """
+    Class Token is the feature map that will be used in the last step for classification
+    If the input image size is (224,224) and convolution filter is 16*16 with a strides=16, we will get feature map (14, 14)
+    After we flatten this feature map to 196 which means this image have 196 sequence features
+    Then we going to create a class token and stack on this 196 features makes it 197
+    During the training, this class token will interact with other feature maps and in the end we going to use this class token to make prediction
+    """
+
+    def __init__(self, initializer='zeros', regularizer=None, constraint=None, **kwargs):
+        super(ClassToken, self).__init__(**kwargs)
+        self.initializer = keras.initializers.get(initializer)
+        self.regularizer = keras.regularizers.get(regularizer)
+        self.constraint = keras.constraints.get(constraint)
+        self.num_features = 0
+        self.cls_w = None
+
+
+    def build(self, input_shape):
+        self.num_features = input_shape[-1]
+        self.cls_w = self.add_weight(
+            shape = (1, 1, self.num_features),
+            initializer=self.initializer,
+            regularizer=self.regularizer,
+            constraint=self.constraint
+        )
+
+    # def get_config(self):
+    #     pass
+
+
+    def call(self, inputs, *args, **kwargs):
+        batch_size = inputs.shape[0]
+        cls_broadcast = tf.broadcast_to(self.cls_w, [batch_size, 1, self.num_features])
+        cls_broadcast = tf.cast(cls_broadcast, dtype=inputs.dtype)
+        return tf.concat([cls_broadcast, inputs], axis=1)
+
+
+
+class PositionEmbedding(layers.Layer):
+    """
+    Position Embedding layer: add position information to each small patches
+    For instance, if input image is 224x224, after flatten it, it will 196x768 after concat with cls token it will be 197x764
+    Hence position embedding layer will be 197x764 as well to provide position information for each feature
+    """
+    def __init__(self, initializer='zero', regularizer=None, constraint=None, **kwargs):
+        super(PositionEmbedding, self).__init__()
+        self.initializer = keras.initializers.get(initializer)
+        self.regularizer = keras.regularizers.get(regularizer)
+        self.constraint = keras.constraints.get(constraint)
+
+
+    def build(self, input_shape):
+```
+
+
 
 ##### 2.2 Transformer encoder
 
+After we generate inputs with position information then we going to feed these inputs into the transformer encoder. Before we talked about transformer encoder, let's take a look at self attention first. To understand self attention, basically you just need to understand below images. In self attention, there are 3 major elements, Q stands for query vector, K stands for key vector and V stands for value vector.
 
+![self_attention](https://github.com/Qucy/ViT-VisionTransformer/blob/master/img/self_attention.jpg)
 
+To generate an output basically have below steps:
 
+- First generate Q, K and V. Q = inputs * Wq,  K = inputs * Wk, V = inputs * Wv
+- Then we use Q * K  to retrieve scores for each inputs
+- Apply softmax function to scores to retrieve importance for each sequence
+- Multiply these scores with V and calculate sum to generate outputs Z
 
-### 3. ViT
+![qkv](https://github.com/Qucy/ViT-VisionTransformer/blob/master/img/qkv.jpg)
 
-coming soon
+A sample code is looks like below
+
+```python
+import numpy as np
+
+def soft_max(z):
+    t = np.exp(z)
+    a = np.exp(z) / np.expand_dims(np.sum(t, axis=1), 1)
+    return a
+
+Query = np.array([
+    [1,0,2],
+    [2,2,2],
+    [2,1,3]
+])
+
+Key = np.array([
+    [0,1,1],
+    [4,4,0],
+    [2,3,1]
+])
+
+Value = np.array([
+    [1,2,3],
+    [2,8,0],
+    [2,6,3]
+])
+
+scores = Query @ Key.T
+print(scores)
+scores = soft_max(scores)
+print(scores)
+out = scores @ Value
+print(out)
+```
 
 
 

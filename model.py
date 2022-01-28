@@ -1,19 +1,20 @@
+import os
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, Model
 
+os.environ['CPP_TF_MIN_LOG_LEVEL'] = '2'
 
 print(tf.__version__)
-
 
 
 class ClassToken(layers.Layer):
     """
     Class Token is the feature map that will be used in the last step for classification
-    If the image input size is (224,224) and convolution filter is 16*16 with a strides=16, we will get feature map (14, 14)
+    If the input image size is (224,224) and convolution filter is 16*16 with a strides=16, we will get feature map (14, 14)
     After we flatten this feature map to 196 which means this image have 196 sequence features
     Then we going to create a class token and stack on this 196 features makes it 197
-    During the training, this class token will interact with other feature maps and in the end we gong to use class token with dense layer to make prediction
+    During the training, this class token will interact with other feature maps and in the end we going to use this class token to make prediction
     """
 
     def __init__(self, initializer='zeros', regularizer=None, constraint=None, **kwargs):
@@ -74,6 +75,46 @@ class PositionEmbedding(layers.Layer):
 
 
 
+class Attention(layers.Layer):
+    """
+    Attention layer, split inputs into q,k,v vector
+    then calc outputs based on formula outputs = ( Q * transpose(K) ) / sqrt(d) * V
+    """
+    def __init__(self, num_features, num_heads):
+        super(Attention, self).__init__()
+        self.num_features = num_features
+        self.num_heads = num_heads
+        self.project_dim = num_features // num_heads
+
+
+
+    def call(self, inputs):
+        """
+        :param inputs: input feature map with shape (batch_size, sequence_length, 3 * num_features)
+        :return: processed inputs
+        """
+        batch_size = inputs.shape[0]
+        # (batch_size, sequence_length, 3 * num_features) -> (batch_size, sequence_length, 3, num_heads, project_dim)
+        inputs = tf.reshape(inputs, [batch_size, -1, 3, self.num_heads, self.project_dim])
+        # (batch_size, sequence_length, 3, num_heads, project_dim) -> (3, batch_size, num_heads, sequence_length, project_dim)
+        inputs = tf.transpose(inputs, [2, 0, 3, 1, 4])
+        # retrieve q,k,v -> shape (batch_size, num_heads, sequence_length, project_dim)
+        query, key, value = inputs[0], inputs[1], inputs[2]
+        # calculate score if sequence_length = 197 and project_dim = 64 (b, num_heads, 197, 64) @ (b, num_heads, 197, 64).T -> (b, num_heads, 197, 197)
+        score = tf.matmul(query, key, transpose_b=True)
+        # calculate scaled score
+        scaled_score = score / tf.sqrt(tf.cast(self.project_dim, dtype=score.dtype))
+        # calculate weights (b, num_heads, 197, 197)
+        weights = tf.nn.softmax(scaled_score, axis=-1)
+        # calculate weighted value (b, num_heads, 197, 197) @ (b, num_heads, 197, 64) -> (b, num_heads, 197, 64)
+        weighted_value = tf.matmul(weights, value)
+        # (b, num_heads, 197, 64) -> (b, 197, num_heads, 64)
+        outputs = tf.transpose(weighted_value, [0, 2, 1, 3])
+        # (b, 197, num_heads, 64) -> (b, 197, num_heads*64)
+        outputs = tf.reshape(outputs, [batch_size, -1, self.num_features])
+        return outputs
+        
+
 if __name__ == '__main__':
     # test ClassToken
     feature_maps = tf.random.normal([4, 196, 768])
@@ -87,3 +128,8 @@ if __name__ == '__main__':
     inputs_posEmbedding = posEmbedding(inputs)
     print(inputs_posEmbedding.shape)
 
+    # test attention
+    attention_inputs = tf.concat([inputs_posEmbedding, inputs_posEmbedding, inputs_posEmbedding], axis=-1)
+    attention = Attention(num_features=768, num_heads=12)
+    attention_outputs = attention(attention_inputs)
+    print(attention_outputs.shape)
