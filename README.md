@@ -168,6 +168,119 @@ out = scores @ Value
 print(out)
 ```
 
+##### 2.3 Multi-Head attention
+
+Multi-Head attention is basically you have multiple Q, K and V. Below image depicting the 2 heads attention, here in the image we got 2 pairs of Q, K and V, hence we are going to get 2 attention outputs and then we can merge these outputs as final outputs.
+
+![multi-head](https://github.com/Qucy/ViT-VisionTransformer/blob/master/img/multi-head.jpg)
+
+source code for multi-head attention is as below
+
+```python
+class MultiHeadSelfAttention(layers.Layer):
+    """
+    Attention layer, split inputs into q,k,v vector
+    then calc outputs based on formula outputs = ( Q * transpose(K) ) / sqrt(d) * V
+    """
+    def __init__(self, num_features, num_heads, dropout=.2):
+        super(MultiHeadSelfAttention, self).__init__()
+        self.num_features = num_features
+        self.num_heads = num_heads
+        self.project_dim = num_features // num_heads
+        self.qkv = layers.Dense(3 * self.num_features)
+        self.dense = layers.Dense(self.num_features)
+        self.dropout = layers.Dropout(dropout)
+
+
+    def call(self, inputs, training=None):
+        """
+        :param inputs: input feature map with shape (batch_size, sequence_length, 3 * num_features)
+        :return: processed inputs
+        """
+        batch_size = inputs.shape[0]
+        # (batch_size, sequence_length, num_features) => (batch_size, sequence_length, 3 * num_features)
+        qkv = self.qkv(inputs)
+        # (batch_size, sequence_length, 3 * num_features) -> (batch_size, sequence_length, 3, num_heads, project_dim)
+        inputs = tf.reshape(qkv, [batch_size, -1, 3, self.num_heads, self.project_dim])
+        # (batch_size, sequence_length, 3, num_heads, project_dim) -> (3, batch_size, num_heads, sequence_length, project_dim)
+        inputs = tf.transpose(inputs, [2, 0, 3, 1, 4])
+        # retrieve q,k,v -> shape (batch_size, num_heads, sequence_length, project_dim)
+        query, key, value = inputs[0], inputs[1], inputs[2]
+        # calculate score if sequence_length = 197 and project_dim = 64 (b, num_heads, 197, 64) @ (b, num_heads, 197, 64).T -> (b, num_heads, 197, 197)
+        score = tf.matmul(query, key, transpose_b=True)
+        # calculate scaled score
+        scaled_score = score / tf.sqrt(tf.cast(self.project_dim, dtype=score.dtype))
+        # calculate weights (b, num_heads, 197, 197)
+        weights = tf.nn.softmax(scaled_score, axis=-1)
+        # calculate weighted value (b, num_heads, 197, 197) @ (b, num_heads, 197, 64) -> (b, num_heads, 197, 64)
+        weighted_value = tf.matmul(weights, value)
+        # (b, num_heads, 197, 64) -> (b, 197, num_heads, 64)
+        outputs = tf.transpose(weighted_value, [0, 2, 1, 3])
+        # (b, 197, num_heads, 64) -> (b, 197, num_heads*64)
+        outputs = tf.reshape(outputs, [batch_size, -1, self.num_features])
+        # (b, 197, num_heads*64) => (b, 197, num_heads*64)
+        outputs = self.dense(outputs)
+        if training:
+            outputs = self.dropout(outputs)
+        return outputs
+```
+
+##### 2.4 Transformer encoder
+
+After Multi-Head attention is constructed, then we can start to constructed transformer encoder, below image depicting the network structure for transformer encoder.
+
+- Embedding + Position -> Layer Normalization(yellow) -> Multi-Head Attention(green)
+- Multi-Head Attention + (Embedding + Position) -> residual outputs 1
+- residual outputs 1 -> Layer Normalization(yellow) -> MLP network(blue) 
+- MLP network outputs +  residual outputs 1 -> final outpus
+
+
+
+![transformer_encoder](https://github.com/Qucy/ViT-VisionTransformer/blob/master/img/transformer_encoder.jpg)
+
+Source code for transformer encoder is as below
+
+```python
+class TransformerBlock(layers.Layer):
+
+    def __init__(self, num_features, num_heads, mlp_dim, dropout=.2):
+        super(TransformerBlock, self).__init__()
+        self.layerNorm1 = layers.LayerNormalization(epsilon=1e-6)
+        self.multiHeadSelfAttention = MultiHeadSelfAttention(num_features, num_heads, dropout)
+        self.dropout1 = layers.Dropout(dropout)
+        self.layerNorm2 = layers.LayerNormalization(epsilon=1e-6)
+        self.MLP = Sequential([
+            layers.Dense(mlp_dim),
+            tfa.layers.GELU(),
+            layers.Dropout(.2),
+            layers.Dense(num_features)
+        ])
+        self.dropout2 = layers.Dropout(dropout)
+
+
+    def call(self, inputs, training=None):
+        # layer normalization
+        x = self.layerNorm1(inputs)
+        # multi-head attention
+        x = self.multiHeadSelfAttention(x)
+        # dropout 1
+        if training:
+            x = self.dropout1(x)
+        # residual
+        x = layers.Add()([inputs, x])
+        # layer normalization
+        y = self.layerNorm2(x)
+        # MLP
+        y = self.MLP(y)
+        # dropout 2
+        if training:
+            y = self.dropout2(y)
+        # residual
+        y = layers.Add()([x, y])
+
+        return y
+```
+
 
 
 

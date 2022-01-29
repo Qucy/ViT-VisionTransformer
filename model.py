@@ -1,7 +1,9 @@
 import os
 import tensorflow as tf
+import tensorflow_addons as tfa
 from tensorflow import keras
-from tensorflow.keras import layers, Model
+from tensorflow.keras import layers, Model, Sequential
+
 
 os.environ['CPP_TF_MIN_LOG_LEVEL'] = '2'
 
@@ -75,27 +77,31 @@ class PositionEmbedding(layers.Layer):
 
 
 
-class Attention(layers.Layer):
+class MultiHeadSelfAttention(layers.Layer):
     """
     Attention layer, split inputs into q,k,v vector
     then calc outputs based on formula outputs = ( Q * transpose(K) ) / sqrt(d) * V
     """
-    def __init__(self, num_features, num_heads):
-        super(Attention, self).__init__()
+    def __init__(self, num_features, num_heads, dropout):
+        super(MultiHeadSelfAttention, self).__init__()
         self.num_features = num_features
         self.num_heads = num_heads
         self.project_dim = num_features // num_heads
+        self.qkv = layers.Dense(3 * self.num_features)
+        self.dense = layers.Dense(self.num_features)
+        self.dropout = layers.Dropout(dropout)
 
 
-
-    def call(self, inputs):
+    def call(self, inputs, training=None):
         """
         :param inputs: input feature map with shape (batch_size, sequence_length, 3 * num_features)
         :return: processed inputs
         """
         batch_size = inputs.shape[0]
+        # (batch_size, sequence_length, num_features) => (batch_size, sequence_length, 3 * num_features)
+        qkv = self.qkv(inputs)
         # (batch_size, sequence_length, 3 * num_features) -> (batch_size, sequence_length, 3, num_heads, project_dim)
-        inputs = tf.reshape(inputs, [batch_size, -1, 3, self.num_heads, self.project_dim])
+        inputs = tf.reshape(qkv, [batch_size, -1, 3, self.num_heads, self.project_dim])
         # (batch_size, sequence_length, 3, num_heads, project_dim) -> (3, batch_size, num_heads, sequence_length, project_dim)
         inputs = tf.transpose(inputs, [2, 0, 3, 1, 4])
         # retrieve q,k,v -> shape (batch_size, num_heads, sequence_length, project_dim)
@@ -112,24 +118,77 @@ class Attention(layers.Layer):
         outputs = tf.transpose(weighted_value, [0, 2, 1, 3])
         # (b, 197, num_heads, 64) -> (b, 197, num_heads*64)
         outputs = tf.reshape(outputs, [batch_size, -1, self.num_features])
+        # (b, 197, num_heads*64) => (b, 197, num_heads*64)
+        outputs = self.dense(outputs)
+        if training:
+            outputs = self.dropout(outputs)
         return outputs
+
+
+class TransformerBlock(layers.Layer):
+
+    def __init__(self, num_features, num_heads, mlp_dim, dropout=.2):
+        super(TransformerBlock, self).__init__()
+        self.layerNorm1 = layers.LayerNormalization(epsilon=1e-6)
+        self.multiHeadSelfAttention = MultiHeadSelfAttention(num_features, num_heads, dropout)
+        self.dropout1 = layers.Dropout(dropout)
+        self.layerNorm2 = layers.LayerNormalization(epsilon=1e-6)
+        self.MLP = Sequential([
+            layers.Dense(mlp_dim),
+            tfa.layers.GELU(),
+            layers.Dropout(.2),
+            layers.Dense(num_features)
+        ])
+        self.dropout2 = layers.Dropout(dropout)
+
+
+    def call(self, inputs, training=None):
+        # layer normalization
+        x = self.layerNorm1(inputs)
+        # multi-head attention
+        x = self.multiHeadSelfAttention(x)
+        # dropout 1
+        if training:
+            x = self.dropout1(x)
+        # residual
+        x = layers.Add()([inputs, x])
+        # layer normalization
+        y = self.layerNorm2(x)
+        # MLP
+        y = self.MLP(y)
+        # dropout 2
+        if training:
+            y = self.dropout2(y)
+        # residual
+        y = layers.Add()([x, y])
+
+        return y
+
+
+
+
+
         
 
 if __name__ == '__main__':
     # test ClassToken
     feature_maps = tf.random.normal([4, 196, 768])
     # init clsToken
-    clsToken = ClassToken()
-    inputs = clsToken(feature_maps)
-    assert inputs.shape == (4, 197, 768)
+    # clsToken = ClassToken()
+    # inputs = clsToken(feature_maps)
+    # assert inputs.shape == (4, 197, 768)
+    #
+    # # test PositionEmbedding
+    # posEmbedding = PositionEmbedding()
+    # inputs_posEmbedding = posEmbedding(inputs)
+    # print(inputs_posEmbedding.shape)
+    #
+    # # test attention
+    # attention = MultiHeadSelfAttention(num_features=768, num_heads=12)
+    # attention_outputs = attention(inputs_posEmbedding)
+    # print(attention_outputs.shape)
 
-    # test PositionEmbedding
-    posEmbedding = PositionEmbedding()
-    inputs_posEmbedding = posEmbedding(inputs)
-    print(inputs_posEmbedding.shape)
+    transformer = TransformerBlock(num_features=768, num_heads=12, mlp_dim=3072)
+    outputs = transformer(feature_maps)
 
-    # test attention
-    attention_inputs = tf.concat([inputs_posEmbedding, inputs_posEmbedding, inputs_posEmbedding], axis=-1)
-    attention = Attention(num_features=768, num_heads=12)
-    attention_outputs = attention(attention_inputs)
-    print(attention_outputs.shape)
+    print(outputs.shape)
