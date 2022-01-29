@@ -136,7 +136,7 @@ class TransformerBlock(layers.Layer):
         self.MLP = Sequential([
             layers.Dense(mlp_dim),
             tfa.layers.GELU(),
-            layers.Dropout(.2),
+            layers.Dropout(dropout),
             layers.Dense(num_features)
         ])
         self.dropout2 = layers.Dropout(dropout)
