@@ -1,6 +1,6 @@
 import os
 import tensorflow as tf
-from model import VisionTransformer
+from ViT.model import VisionTransformer
 
 os.environ['CPP_TF_MIN_LOG_LEVEL'] = '2'
 
@@ -51,7 +51,6 @@ modelCheckPointCallBack = tf.keras.callbacks.ModelCheckpoint(
                                                             monitor='val_accuracy',
                                                             mode='max',
                                                             save_best_only=True)
-
 
 
 # train
