@@ -19,7 +19,7 @@ def preprocess(x, y):
 batch_size = 64
 AUTO_TUNE = tf.data.AUTOTUNE
 lr = 1e-5
-checkpoint_filepath = '/model/'
+checkpoint_filepath = './model/vit.h5'
 
 # loading data
 (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar100.load_data()
@@ -27,6 +27,12 @@ assert x_train.shape == (50000, 32, 32, 3)
 assert x_test.shape == (10000, 32, 32, 3)
 assert y_train.shape == (50000, 1)
 assert y_test.shape == (10000, 1)
+
+# for testing purpose - to quick validate whether all the function is workable
+#x_train = x_train[:1000]
+#y_train = y_train[:1000]
+#x_test = x_test[:1000]
+#y_test = y_test[:1000]
 
 # create datasets
 ds_train = tf.data.Dataset.from_tensor_slices((x_train, y_train))
@@ -52,9 +58,8 @@ modelCheckPointCallBack = tf.keras.callbacks.ModelCheckpoint(
                                                             mode='max',
                                                             save_best_only=True)
 
-
 # train
-ViT.fit(ds_train, validation_data=ds_test, callbacks=[earlyStopCallBack, modelCheckPointCallBack], epochs=5)
-# save weights
-# ViT.save_weights('./model/ViT.h5')
-# 5 epochs 781/781 [==============================] - 394s 504ms/step - loss: 2.9383 - accuracy: 0.2646 - val_loss: 2.9550 - val_accuracy: 0.2724
+ViT.fit(ds_train, validation_data=ds_test, callbacks=[earlyStopCallBack, modelCheckPointCallBack], epochs=50)
+
+# after training for 50 epochs (around 10 hours)
+# 781/781 [==============================] - 370s 473ms/step - loss: 0.0667 - accuracy: 0.9850 - val_loss: 4.9496 - val_accuracy: 0.3070
