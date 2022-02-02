@@ -51,11 +51,11 @@ Before answer this question we need to take a look at attention's calculation.
 - To generate Q,K,V complexity is O(n)
 - Attention map in memory is O(n^2)
 
-Number of Q, K is depending on patch size, if patch size is small, then will have more Q,K,  more time to calculate MHA and more memory need in GPU. If patch size is big, the feature map aspect ratio will be bigger, will impact on model performance. Hence in PVT they use a technical called Spatial Reduction Attention.
+Number of Q, K is depending on patch size, if patch size is small, then will have more Q,K,  more time to calculate MHA and more memory need in GPU. If patch size is big, the feature map aspect ratio will be bigger, will impact on model performance. Hence in PVT they use a technical called Spatial Reduction Attention to solve this problem.
 
 ##### 2.2 Spatial Reduction Attention
 
-Below image and description describe what is Spatial Reduction Attention. Basically the author reduce the K and V before the attention operation. The reason they don't reduce Q is because they don't change the patch size which may have impact on performance.
+Below image describe what is Spatial Reduction Attention. Basically reduce the K and V before the attention operation. The reason don't reduce Q is referring to the patch size and we don't want to change the patch size which may have impact on performance.
 
 ![sra](https://github.com/Qucy/VisionTransformer/blob/master/img/sra.jpg)
 
