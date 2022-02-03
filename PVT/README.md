@@ -31,6 +31,10 @@ To show that transformer can be applied in many downstream computer vision tasks
 
 ### 2. PVC architecture
 
+Below image depicting the overall architecture of PVC network.
+
+![pvt_overall](https://github.com/Qucy/VisionTransformer/blob/master/img/pvt_overall.jpg)
+
 ##### 2.1 pyramid architecture
 
 Below image depicting the traditional architecture for CNNs(a), Vision Transformer(b) and Pyramid Vision Transformer(c).  PVT is very similar with CNNs, both reducing image width, height while increase channels layer by layer, or we can call it pyramid network But why doing this, any reason behind this ?
@@ -92,5 +96,5 @@ After backbone network change from ResNet to PVT all the model has an obvious im
 
 ### 5. PVT-V2
 
-
+coming soon
 
