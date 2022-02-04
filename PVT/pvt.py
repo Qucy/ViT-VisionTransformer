@@ -1,7 +1,7 @@
 import os
 import tensorflow as tf
 import tensorflow_addons as tfa
-from tensorflow.keras import layers, Model, Sequential
+from tensorflow.keras import layers, Model
 
 os.environ['CPP_TF_MIN_LOG_LEVEL'] = '2'
 
@@ -150,7 +150,7 @@ class PyramidVisionTransformer(Model):
 
     def __init__(self,
                  img_size=224,
-                 patch_size=16,
+                 patch_size=4,
                  num_classes=1000,
                  embed_dims=[64, 128, 256, 512],
                  num_heads=[1, 2, 4, 8],
@@ -159,13 +159,12 @@ class PyramidVisionTransformer(Model):
                  qk_scale=None,
                  drop_rate=0.,
                  attn_drop_rate=0.,
-                 drop_path_rate=0.,
                  depths=[3, 4, 6, 3],
                  sr_ratios=[8, 4, 2, 1]):
         """
         initialize function for PVC
         :param img_size: image size default value 224
-        :param patch_size: patch size default value 16
+        :param patch_size: patch size default value 4
         :param num_classes: number of classes default value 1000
         :param embed_dims: embedding dimension from stage 1 to 4
         :param num_heads: number of attention heads from stage 1 to 4
@@ -174,7 +173,6 @@ class PyramidVisionTransformer(Model):
         :param qk_scale:  qkv scale or not
         :param drop_rate: drop rate for MLP layer
         :param attn_drop_rate: attention drop rate
-        :param drop_path_rate: projection drop rate
         :param depths: number of attention modules from stage 1 to 4
         :param sr_ratios: spatial reduction attention ratios from stage 1 to 4
         """
@@ -184,50 +182,164 @@ class PyramidVisionTransformer(Model):
         self.depths = depths
 
         # patch_embed
-        self.patch_embed1 = PatchEmbedding(img_size=img_size, patch_size=patch_size, embed_dim=embed_dims[0])
-        self.patch_embed2 = PatchEmbedding(img_size=img_size // 4, patch_size=2, embed_dim=embed_dims[1])
-        self.patch_embed3 = PatchEmbedding(img_size=img_size // 8, patch_size=2, embed_dim=embed_dims[2])
-        self.patch_embed4 = PatchEmbedding(img_size=img_size // 16, patch_size=2, embed_dim=embed_dims[3])
+        self.patch_embed1 = PatchEmbedding(img_size=img_size, patch_size=patch_size, embedding_dim=embed_dims[0])
+        self.patch_embed2 = PatchEmbedding(img_size=img_size // 4, patch_size=2, embedding_dim=embed_dims[1])
+        self.patch_embed3 = PatchEmbedding(img_size=img_size // 8, patch_size=2, embedding_dim=embed_dims[2])
+        self.patch_embed4 = PatchEmbedding(img_size=img_size // 16, patch_size=2, embedding_dim=embed_dims[3])
 
         # position embedding
-        self.pos_embed1 = self.add_weight(shape=[1, self.patch_embed1.num_patches, embed_dims[0]])
+        weight_initializer = tf.keras.initializers.TruncatedNormal(mean=0., stddev=.02)
+        self.pos_embed1 = self.add_weight(shape=[1, self.patch_embed1.num_patches, embed_dims[0]], initializer=weight_initializer)
         self.pos_drop1 = layers.Dropout(drop_rate)
-        self.pos_embed2 = self.add_weight(shape=[1, self.patch_embed2.num_patches, embed_dims[1]])
+        self.pos_embed2 = self.add_weight(shape=[1, self.patch_embed2.num_patches, embed_dims[1]], initializer=weight_initializer)
         self.pos_drop2 = layers.Dropout(drop_rate)
-        self.pos_embed3 = self.add_weight(shape=[1, self.patch_embed3.num_patches, embed_dims[2]])
+        self.pos_embed3 = self.add_weight(shape=[1, self.patch_embed3.num_patches, embed_dims[2]], initializer=weight_initializer)
         self.pos_drop3 = layers.Dropout(drop_rate)
-        self.pos_embed4 = self.add_weight(shape=[1, self.patch_embed4.num_patches + 1, embed_dims[3]])
+        self.pos_embed4 = self.add_weight(shape=[1, self.patch_embed4.num_patches + 1, embed_dims[3]], initializer=weight_initializer)
         self.pos_drop4 = layers.Dropout(drop_rate)
 
         # Blocks
-        self.block1 = Sequential([Block(
-            dim=embed_dims[0], num_heads=num_heads[0], mlp_ratio=mlp_ratios[0], qkv_bias=qkv_bias, qk_scale=qk_scale,
-            drop=drop_rate, attn_drop=attn_drop_rate, sr_ratio=sr_ratios[0]) for _ in range(depths[0])])
+        self.block1 = [Block(dim=embed_dims[0], num_heads=num_heads[0], mlp_ratio=mlp_ratios[0], qkv_bias=qkv_bias, qk_scale=qk_scale,
+            drop=drop_rate, attn_drop=attn_drop_rate, sr_ratio=sr_ratios[0]) for _ in range(depths[0])]
 
-        self.block2 = Sequential([Block(
-            dim=embed_dims[1], num_heads=num_heads[1], mlp_ratio=mlp_ratios[1], qkv_bias=qkv_bias, qk_scale=qk_scale,
-            drop=drop_rate, attn_drop=attn_drop_rate, sr_ratio=sr_ratios[1]) for _ in range(depths[1])])
+        self.block2 = [Block(dim=embed_dims[1], num_heads=num_heads[1], mlp_ratio=mlp_ratios[1], qkv_bias=qkv_bias, qk_scale=qk_scale,
+            drop=drop_rate, attn_drop=attn_drop_rate, sr_ratio=sr_ratios[1]) for _ in range(depths[1])]
 
-        self.block3 = Sequential([Block(
-            dim=embed_dims[2], num_heads=num_heads[2], mlp_ratio=mlp_ratios[2], qkv_bias=qkv_bias, qk_scale=qk_scale,
-            drop=drop_rate, attn_drop=attn_drop_rate, sr_ratio=sr_ratios[2]) for _ in range(depths[2])])
+        self.block3 = [Block(dim=embed_dims[2], num_heads=num_heads[2], mlp_ratio=mlp_ratios[2], qkv_bias=qkv_bias, qk_scale=qk_scale,
+            drop=drop_rate, attn_drop=attn_drop_rate, sr_ratio=sr_ratios[2]) for _ in range(depths[2])]
 
-        self.block4 = Sequential([Block(
-            dim=embed_dims[3], num_heads=num_heads[3], mlp_ratio=mlp_ratios[3], qkv_bias=qkv_bias, qk_scale=qk_scale,
-            drop=drop_rate, attn_drop=attn_drop_rate, sr_ratio=sr_ratios[3]) for _ in range(depths[3])])
+        self.block4 = [Block(dim=embed_dims[3], num_heads=num_heads[3], mlp_ratio=mlp_ratios[3], qkv_bias=qkv_bias, qk_scale=qk_scale,
+            drop=drop_rate, attn_drop=attn_drop_rate, sr_ratio=sr_ratios[3]) for _ in range(depths[3])]
 
         self.norm = layers.LayerNormalization()
 
+        # class token
+        self.cls_token = self.add_weight(shape=[1, 1, embed_dims[3]], initializer=weight_initializer)
 
-
-
-
-
+        # dense layer for prediction
+        self.dense = layers.Dense(num_classes)
 
 
     def call(self, inputs, training=None, mask=None):
-        pass
 
+        B = inputs.shape[0]
+
+        # stage 1, patch image (b, 224, 224, 3) -> (b, 56, 56, 64) -> (b, 3136, 64)
+        x, (H, W) = self.patch_embed1(inputs)
+        # adding position embedding
+        x = x + self.pos_embed1
+        # dropout
+        x = self.pos_drop1(x)
+        # transformer encoder
+        for blk in self.block1:
+            x = blk(x, H, W) # (b, 3136, 64)
+
+        # (b, 3136, 64) -> (b, 56, 56, 64)
+        x = layers.Reshape([H, W, -1])(x)
+
+        # stage 2 patch image (b, 56, 56, 64) -> (b, 28, 28, 64) -> (b, 784, 128)
+        x, (H, W) = self.patch_embed2(x)
+        # adding position embedding
+        x = x + self.pos_embed2
+        # dropout
+        x = self.pos_drop2(x)
+        # transformer encoder
+        for blk in self.block2:
+            x = blk(x, H, W) # (b, 784, 128)
+
+        # (b, 784, 128) -> (b, 28, 28, 128)
+        x = layers.Reshape([H, W, -1])(x)
+
+        # stage 3 patch image (b, 28, 28, 128) -> (b, 14, 14, 256) -> (b, 196, 256)
+        x, (H, W) = self.patch_embed3(x)
+        # adding position embedding
+        x = x + self.pos_embed3
+        # dropout
+        x = self.pos_drop3(x)
+        # transformer encoder
+        for blk in self.block3:
+            x = blk(x, H, W) # (b, 196, 256)
+
+        # (b, 196, 256) -> (b, 14, 14, 256)
+        x = layers.Reshape([H, W, -1])(x)
+
+        # stage 4 patch image (b, 14, 14, 256) -> (b, 7, 7, 512) -> (b, 49, 512)
+        x, (H, W) = self.patch_embed4(x)
+        # concat with cls token (b, 49, 512) -> (b, 50, 512)
+        self.cls_token = tf.broadcast_to(self.cls_token, [B, 1, self.cls_token.shape[-1]])
+        x = layers.concatenate([self.cls_token, x], axis=1)
+        # adding position embedding
+        x = x + self.pos_embed4
+        # dropout
+        x = self.pos_drop4(x)
+        # transformer encoder
+        for blk in self.block4:
+            x = blk(x, H, W) # (b, 50, 512)
+
+        # layer normalization
+        x = self.norm(x)
+
+        # extract cls token
+        cls_token = x[:, 0]
+
+        # dense layer to make prediction
+        predictions = self.dense(cls_token)
+
+        return predictions
+
+
+
+# def pvt_tiny(pretrained=False, **kwargs):
+#     model = PyramidVisionTransformer(
+#         patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[8, 8, 4, 4], qkv_bias=True,
+#         norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[2, 2, 2, 2], sr_ratios=[8, 4, 2, 1],
+#         **kwargs)
+#     model.default_cfg = _cfg()
+#
+#     return model
+#
+#
+#
+# def pvt_small(pretrained=False, **kwargs):
+#     model = PyramidVisionTransformer(
+#         patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[8, 8, 4, 4], qkv_bias=True,
+#         norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 6, 3], sr_ratios=[8, 4, 2, 1], **kwargs)
+#     model.default_cfg = _cfg()
+#
+#     return model
+#
+#
+#
+# def pvt_medium(pretrained=False, **kwargs):
+#     model = PyramidVisionTransformer(
+#         patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[8, 8, 4, 4], qkv_bias=True,
+#         norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 4, 18, 3], sr_ratios=[8, 4, 2, 1],
+#         **kwargs)
+#     model.default_cfg = _cfg()
+#
+#     return model
+#
+#
+#
+# def pvt_large(pretrained=False, **kwargs):
+#     model = PyramidVisionTransformer(
+#         patch_size=4, embed_dims=[64, 128, 320, 512], num_heads=[1, 2, 5, 8], mlp_ratios=[8, 8, 4, 4], qkv_bias=True,
+#         norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 8, 27, 3], sr_ratios=[8, 4, 2, 1],
+#         **kwargs)
+#     model.default_cfg = _cfg()
+#
+#     return model
+#
+#
+# def pvt_huge_v2(pretrained=False, **kwargs):
+#     model = PyramidVisionTransformer(
+#         patch_size=4, embed_dims=[128, 256, 512, 768], num_heads=[2, 4, 8, 12], mlp_ratios=[8, 8, 4, 4], qkv_bias=True,
+#         norm_layer=partial(nn.LayerNorm, eps=1e-6), depths=[3, 10, 60, 3], sr_ratios=[8, 4, 2, 1],
+#         # drop_rate=0.0, drop_path_rate=0.02)
+#         **kwargs)
+#     model.default_cfg = _cfg()
+#
+#     return model
 
 
 
@@ -235,14 +347,8 @@ if __name__ == '__main__':
 
     inputs = tf.random.normal([4, 224, 224, 3])
 
-    embedding = PatchEmbedding()
+    pvt = PyramidVisionTransformer()
 
-    outputs, (H, W) = embedding(inputs)
+    outputs = pvt(inputs)
 
-    print(outputs.shape, H, W)
-
-    block = Block(768, 8)
-
-    x = block(outputs, H, W)
-
-    print(x.shape)
+    print(outputs.shape)
