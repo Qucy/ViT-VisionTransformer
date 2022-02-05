@@ -1,6 +1,6 @@
 import os
 import tensorflow as tf
-from PVT.pvt import pvt_tiny
+from PVT.pvtv1 import pvt_tiny
 
 os.environ['CPP_TF_MIN_LOG_LEVEL'] = '2'
 

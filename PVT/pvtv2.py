@@ -10,6 +10,25 @@ print(tf.__version__)
 
 class MLP(layers.Layer):
 
+    # self.fc1 = nn.Linear(in_features, hidden_features)
+    # self.dwconv = DWConv(hidden_features)
+    # self.act = act_layer()
+    # self.fc2 = nn.Linear(hidden_features, out_features)
+    # self.drop = nn.Dropout(drop)
+    # self.linear = linear
+    # if self.linear:
+    #     self.relu = nn.ReLU(inplace=True)
+    # self.apply(self._init_weights)
+
+    # x = self.fc1(x)
+    # if self.linear:
+    #     x = self.relu(x)
+    # x = self.dwconv(x, H, W)
+    # x = self.act(x)
+    # x = self.drop(x)
+    # x = self.fc2(x)
+    # x = self.drop(x)
+
     def __init__(self, name, hidden_features, out_features, drop_rate=0):
         super(MLP, self).__init__()
         self.fc1 = layers.Dense(hidden_features, name=f'{name}_MLP_DENSE1')
