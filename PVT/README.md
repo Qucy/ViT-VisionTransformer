@@ -31,7 +31,7 @@ To show that transformer can be applied in many downstream computer vision tasks
 
 ### 2. PVC architecture
 
-Below image depicting the overall architecture of PVC network.
+Overall architecture of PVC network.
 
 ![pvt_overall](https://github.com/Qucy/VisionTransformer/blob/master/img/pvt_overall.jpg)
 
@@ -96,5 +96,46 @@ After backbone network change from ResNet to PVT all the model has an obvious im
 
 ### 5. PVT-V2
 
-coming soon
+##### 5.1 Abstraction
 
+PVT-V2 is a improved version compared with PVT-V1, below are the 3 main updates for PVT V2
+
+- overlapping patch embedding
+- convolutional feedforward networks
+- linear complexity attention layers
+
+##### 5.2 Overlapping patch embedding
+
+They utilize overlapping patch embedding to tokenize images. As shown in below image, they enlarge the patch window, making adjacent windows overlap by half of the area, and pad the feature map with zeros to keep the resolution. In this work, they use convolution with zero paddings to implement overlapping patch embedding. Specifically, given an input of size h × w × c,  feed it to a convolution with the stride of S, the kernel size of 2S − 1, the padding size of S − 1, and the kernel number of  C‘. The output size is h/S, w/S, C'.
+
+![overlapping_patching](https://github.com/Qucy/VisionTransformer/blob/master/img/overlapping_patching.jpg)
+
+##### 5.2 Convolutional Feed-Forward
+
+Inspired by other Vision Transformers, they remove the fixed-size position encoding, and introduce zero padding position encoding into PVT. As shown in below image, they add a 3 × 3 depth-wise convolution with the padding size of 1 between the first fully-connected (FC) layer and GELU in feed-forward networks.
+
+![feed-forward](https://github.com/Qucy/VisionTransformer/blob/master/img/feed-forward.jpg)
+
+##### 5.3 Linear Spatial Reduction Attention
+
+To further reduce the computation cost of PVT, they propose linear spatial reduction attention (SRA) as illustrated in below image. 
+
+![sra_v2](https://github.com/Qucy/VisionTransformer/blob/master/img/sra_v2.jpg)
+
+Different from SRA, linear SRA enjoys linear computational and memory costs like a convolutional layer. Specifically, given an input of size h×w×c, the complexity of SRA and linear SRA are:
+
+![liner_spatial_reduction_attetion](https://github.com/Qucy/VisionTransformer/blob/master/img/liner_spatial_reduction_attetion.jpg)
+
+where R is the spatial reduction ratio of SRA. P is the pooling size of linear SRA, which is set to 7 by default. Combining the three improvements, PVTv2 can (1) obtain more local continuity of images and feature maps; (2) process variable-resolution input more flexibly; (3) enjoy the same linear complexity as CNN.
+
+##### 5.4 PVT-V2 Series
+
+Below image shows all the version for PVT-V2
+
+![pvt-v2](https://github.com/Qucy/VisionTransformer/blob/master/img/pvt-v2.jpg)
+
+##### 5.5 Performance and Results
+
+Below image summarize the performance for PVT-V2 in image classification, object detection and instance segmentation. Meanwhile author also compare with Swim Transformer on object detection.
+
+![pvt-v2-performance](https://github.com/Qucy/VisionTransformer/blob/master/img/pvt-v2-performance.jpg)

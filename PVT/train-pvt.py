@@ -6,9 +6,9 @@ os.environ['CPP_TF_MIN_LOG_LEVEL'] = '2'
 
 
 """
-Here for simple, we use CIFAR100 image for test
+Here for simple, we use CIFAR100 image for test only
+You can use your own dataset as well but remember to update image size and patch size accordingly
 """
-
 def preprocess(x, y):
     x = tf.cast(x, dtype=tf.float32) / 255.
     y = tf.cast(y, dtype=tf.int32)
@@ -19,7 +19,6 @@ def preprocess(x, y):
 batch_size = 64
 AUTO_TUNE = tf.data.AUTOTUNE
 lr = 1e-5
-checkpoint_filepath = './model/pvt-v1.h5'
 
 # loading data
 (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar100.load_data()
@@ -29,10 +28,10 @@ assert y_train.shape == (50000, 1)
 assert y_test.shape == (10000, 1)
 
 # for testing purpose - to quick validate whether all the function is workable
-x_train = x_train[:1000]
-y_train = y_train[:1000]
-x_test = x_test[:1000]
-y_test = y_test[:1000]
+# x_train = x_train[:1000]
+# y_train = y_train[:1000]
+# x_test = x_test[:1000]
+# y_test = y_test[:1000]
 
 # create datasets
 ds_train = tf.data.Dataset.from_tensor_slices((x_train, y_train))
@@ -52,15 +51,9 @@ pvt_tiny.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr),
 earlyStopCallBack = tf.keras.callbacks.EarlyStopping(monitor='loss', patience=3)
 
 # train
-pvt_tiny.fit(ds_train, validation_data=ds_test, callbacks=[earlyStopCallBack], epochs=1)
+pvt_tiny.fit(ds_train, validation_data=ds_test, callbacks=[earlyStopCallBack], epochs=15)
+# after train for 15 epochs the result is as below
+# 781/781 [==============================] - 39s 49ms/step - loss: 1.7748 - accuracy: 0.5496 - val_loss: 3.2254 - val_accuracy: 0.2652
 
 # save model
 pvt_tiny.save('./model/pvt.tf')
-
-test_data, test_label = next(iter(ds_test))
-
-print(test_data.shape)
-
-prediction = pvt_tiny.predict(test_data)
-
-print(prediction.shape)

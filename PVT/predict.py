@@ -28,9 +28,10 @@ print(test_data.shape)
 
 pvt_tiny = tf.keras.models.load_model('./model/pvt.tf')
 
-predictions = pvt_tiny.predict(test_data)
+predictions = pvt_tiny.predict(test_data, batch_size=batch_size)
 
 print(predictions.shape)
+print(tf.math.softmax(predictions[0]))
 
 
 

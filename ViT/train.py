@@ -4,11 +4,9 @@ from ViT.model import VisionTransformer
 
 os.environ['CPP_TF_MIN_LOG_LEVEL'] = '2'
 
-
 """
 Here for simple, we use CIFAR100 image for test
 """
-
 def preprocess(x, y):
     x = tf.cast(x, dtype=tf.float32) / 255.
     y = tf.cast(y, dtype=tf.int32)
@@ -29,10 +27,10 @@ assert y_train.shape == (50000, 1)
 assert y_test.shape == (10000, 1)
 
 # for testing purpose - to quick validate whether all the function is workable
-# x_train = x_train[:1000]
-# y_train = y_train[:1000]
-# x_test = x_test[:1000]
-# y_test = y_test[:1000]
+x_train = x_train[:1000]
+y_train = y_train[:1000]
+x_test = x_test[:1000]
+y_test = y_test[:1000]
 
 # create datasets
 ds_train = tf.data.Dataset.from_tensor_slices((x_train, y_train))
@@ -59,6 +57,13 @@ modelCheckPointCallBack = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint
 
 # train
 ViT.fit(ds_train, validation_data=ds_test, callbacks=[earlyStopCallBack, modelCheckPointCallBack], epochs=50)
-
 # after training for 50 epochs (around 10 hours)
 # 781/781 [==============================] - 370s 473ms/step - loss: 0.0667 - accuracy: 0.9850 - val_loss: 4.9496 - val_accuracy: 0.3070
+
+
+# prediction
+test_data, test_label = next(iter(ds_test))
+# remember to pass batch size, default batch size is 32, if batch size is not matched, will encounter error when concat
+# cls token with inputs
+prediction = ViT.predict(test_data, batch_size=batch_size)
+

@@ -40,7 +40,11 @@ class ClassToken(layers.Layer):
         super(ClassToken, self).build(input_shape)
 
 
-    def call(self, inputs):
+    def call(self, inputs, training=None):
+        if training:
+            print("===> Training:", inputs.shape, self.cls_w.shape, self.batch_size, self.num_features)
+        else:
+            print("===> Inference:", inputs.shape, self.cls_w.shape, self.batch_size, self.num_features)
         cls_broadcast = tf.broadcast_to(self.cls_w, [self.batch_size, 1, self.num_features])
         cls_broadcast = tf.cast(cls_broadcast, dtype=inputs.dtype)
         return tf.concat([cls_broadcast, inputs], axis=1)
@@ -198,9 +202,12 @@ class VisionTransformer(Model):
 
     def call(self, inputs):
         # patching (b, 224, 224, 3) -> (b, 14, 14, 768)
+        print("=====> inputs", inputs.shape)
         x = self.conv(inputs)
+        print("=====> after patching", x.shape)
         # (b, 14, 14, 768) -> (b, 196, 768)
         x = self.reshape(x)
+        print("=====> after reshape", x.shape)
         # class token (b, 196, 768) -> (b, 197, 768)
         x = self.classToken(x)
         # position embedding (b, 197, 768)
