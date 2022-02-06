@@ -26,9 +26,9 @@ test_data, test_label = next(iter(ds_test))
 
 print(test_data.shape)
 
-pvt_tiny = tf.keras.models.load_model('./model/pvt.tf')
+model = tf.keras.models.load_model('./model/pvt_v2_b0.tf')
 
-predictions = pvt_tiny.predict(test_data, batch_size=batch_size)
+predictions = model.predict(test_data, batch_size=batch_size)
 
 print(predictions.shape)
 print(tf.math.softmax(predictions[0]))
