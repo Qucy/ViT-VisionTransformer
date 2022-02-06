@@ -174,8 +174,6 @@ class OverlapPatchEmbed(layers.Layer):
         assert patch_size > stride, "Set larger patch_size than stride"
 
         self.img_size = img_size
-        self.H = self.img_size // 2
-        self.W = self.img_size // 2
         self.patch_size = patch_size
         self.embed_dim = embed_dim
         self.H, self.W = img_size // stride, img_size // stride
