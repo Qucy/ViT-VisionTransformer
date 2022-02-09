@@ -6,6 +6,8 @@ ViT -> https://github.com/Qucy/VisionTransformer/tree/master/ViT
 
 PVT -> https://github.com/Qucy/VisionTransformer/tree/master/PVT
 
+Swin Transformer -> https://github.com/Qucy/VisionTransformer/tree/master/Swin
+
 
 
 
