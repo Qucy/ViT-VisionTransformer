@@ -133,7 +133,7 @@ class Attention(layers.Layer):
         # (b, num_heads, 196, 196)
         attention = tf.nn.softmax(attention, axis=-1)
         attention = self.attention_drop(attention)
-        # (b, num_heads, 196, 196) * # (b, num_heads, 196, 96) -> (b, num_heads, 196, 96)
+        # (b, num_heads, 196, 196) * (b, num_heads, 196, 96) -> (b, num_heads, 196, 96)
         x = tf.matmul(attention, v)
         # (b, num_heads, 196, 96) -> (b, 196, num_heads, 96)
         x = tf.transpose(x, [0, 2, 1, 3])
