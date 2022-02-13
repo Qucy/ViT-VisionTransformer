@@ -44,7 +44,7 @@ def window_partition(x, h, w, window_size):
 
 def window_reverse(windows, window_size, H, W):
     """
-    Args: TODO
+    Args:
         windows: (num_windows*B, window_size, window_size, C)
         window_size (int): Window size
         H (int): Height of image
@@ -53,8 +53,9 @@ def window_reverse(windows, window_size, H, W):
         x: (B, H, W, C)
     """
     B = int(windows.shape[0] / (H * W / window_size / window_size))
-    x = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
-    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
+    x = tf.reshape(windows, [B, H // window_size, W // window_size, window_size, window_size, -1])
+    x = tf.transpose(x, [0, 1, 3, 2, 4, 5])
+    x = tf.reshape(x, [B, H, W, -1])
     return x
 
 
@@ -244,8 +245,7 @@ class SwinTransformerBlock(layers.Layer):
 
         # cyclic shift
         if self.shift_size > 0:
-            #shifted_x = torch.roll(x, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2)) TODO
-            pass
+            shifted_x = tf.roll(x, shift=(-self.shift_size, -self.shift_size), axis=(1, 2))
         else:
             shifted_x = x
 
@@ -262,8 +262,7 @@ class SwinTransformerBlock(layers.Layer):
 
         # reverse cyclic shift
         if self.shift_size > 0:
-            #x = torch.roll(shifted_x, shifts=(self.shift_size, self.shift_size), dims=(1, 2)) TODO
-            pass
+            x = tf.roll(shifted_x, shift=(self.shift_size, self.shift_size), axis=(1, 2))
         else:
             x = shifted_x
 
