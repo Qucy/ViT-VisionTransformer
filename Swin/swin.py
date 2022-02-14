@@ -141,7 +141,7 @@ class WindowAttention(layers.Layer):
         attn = attn + relative_position_bias
 
         if mask is not None:
-            #nW = mask.shape[0]
+            nW = mask.shape[0]
             #attn = attn.view(B_ // nW, nW, self.num_heads, N, N) + mask.unsqueeze(1).unsqueeze(0)
             #attn = attn.view(-1, self.num_heads, N, N)
             attn = self.softmax(attn)
@@ -213,7 +213,7 @@ class SwinTransformerBlock(layers.Layer):
         assert 0 <= self.shift_size < self.window_size, "shift_size must in 0-window_size"
 
         self.norm1 = layers.LayerNormalization()
-        self.attn = WindowAttention(dim, window_size=(self.window_size, self.window_size), num_heads=num_heads,
+        self.attn = WindowAttention(dim, batch_size, window_size=(self.window_size, self.window_size), num_heads=num_heads,
             qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
 
         self.norm2 = layers.LayerNormalization()
@@ -221,7 +221,7 @@ class SwinTransformerBlock(layers.Layer):
 
         if self.shift_size > 0:
             # calculate attention mask for SW-MSA
-            img_mask = tf.zeros((1, self.H, self.W, 1))  # 1 H W 1
+            img_mask = tf.zeros((1, self.H, self.W, 1)).numpy()  # 1 H W 1
             h_slices = (slice(0, -self.window_size), slice(-self.window_size, -self.shift_size), slice(-self.shift_size, None))
             w_slices = (slice(0, -self.window_size), slice(-self.window_size, -self.shift_size), slice(-self.shift_size, None))
             cnt = 0
@@ -233,9 +233,9 @@ class SwinTransformerBlock(layers.Layer):
             mask_windows = window_partition(img_mask, self.H, self.W, self.window_size)  # nW, window_size, window_size, 1
             mask_windows = tf.reshape(mask_windows, [-1, self.window_size * self.window_size])
             attn_mask = tf.expand_dims(mask_windows, axis=1) - tf.expand_dims(mask_windows, axis=2)
-            attn_mask = tf.where(attn_mask != 0, float(-100.0), float(0.0))
+            self.attn_mask = tf.where(attn_mask != 0, float(-100.0), float(0.0))
         else:
-            attn_mask = None
+            self.attn_mask = None
 
 
     def call(self, inputs, training=None):
@@ -258,7 +258,7 @@ class SwinTransformerBlock(layers.Layer):
 
         # merge windows
         attn_windows = tf.reshape(attn_windows, [-1, self.window_size, self.window_size, self.dim])
-        shifted_x = window_reverse(attn_windows, self.window_size, H, W)  # B H' W' C
+        shifted_x = window_reverse(attn_windows, self.window_size, self.H, self.W)  # B H' W' C
 
         # reverse cyclic shift
         if self.shift_size > 0:
@@ -269,8 +269,8 @@ class SwinTransformerBlock(layers.Layer):
         x = tf.reshape(x, [self.batch_size, self.H * self.W, -1])
 
         # FFN
-        x = shortcut + self.drop_path(x)
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
+        x = shortcut + x
+        x = x + self.mlp(self.norm2(x))
 
         return x
 
@@ -293,12 +293,10 @@ class PatchEmbedding(layers.Layer):
         self.patch_size = patch_size
         self.embedding_dim = embed_dim
         assert img_size % patch_size == 0, f"img_size {img_size} should be divided by patch_size {patch_size}."
-
         self.H, self.W = img_size // patch_size, img_size // patch_size
         self.num_patches = self.H * self.W
         self.project = layers.Conv2D(embed_dim, kernel_size=patch_size, strides=patch_size)
         self.norm = layers.LayerNormalization()
-
 
 
     def call(self, inputs, *args, **kwargs):
@@ -388,6 +386,8 @@ class BasicLayer(layers.Layer):
 
         # build blocks
         self.blocks = [SwinTransformerBlock(
+            self.dim,
+            self.batch_size,
             input_resolution=input_resolution,
             num_heads=num_heads,
             window_size=window_size,
@@ -433,7 +433,8 @@ class SwinTransformer(Model):
                  qk_scale=None,
                  drop_rate=0.,
                  attn_drop_rate=0.,
-                 ape=False):
+                 ape=False,
+                 batch_size=16):
         """
         :param img_size: (int): Input image size. Default 224
         :param patch_size: (int): Patch size. Default: 4
@@ -455,6 +456,7 @@ class SwinTransformer(Model):
         self.num_classes = num_classes
         self.embed_dim = embed_dim
         self.depths = depths
+        self.num_layers = len(depths)
         self.num_heads = num_heads
         self.window_size = window_size
         self.mlp_ratio = mlp_ratio
@@ -463,16 +465,37 @@ class SwinTransformer(Model):
         self.drop_rate = drop_rate
         self.attn_drop_rate = attn_drop_rate
         self.ape = ape
+        self.batch_size = batch_size
         self.weight_initializer = tf.keras.initializers.TruncatedNormal(mean=0., stddev=.02)
 
         # init patch embedding layer
         self.patch_embed = PatchEmbedding(img_size=img_size, patch_size=patch_size, embed_dim=embed_dim)
+        patches_resolution = self.patch_embed.H, self.patch_embed.W
 
         # absolute position
         if self.ape:
             self.absolute_pos_embed = self.add_weight(shape=[1, self.patch_embed.num_patches, embed_dim], initializer=self.weight_initializer, name='absolute_pos_embed')
 
         self.pos_drop = layers.Dropout(drop_rate)
+
+        # build layers
+        self.stages = []
+        # for i_layer in range(self.num_layers):
+        #     stage = BasicLayer(dim=int(embed_dim * 2 ** i_layer),
+        #                        batch_size=batch_size,
+        #                        input_resolution=(patches_resolution[0] // (2 ** i_layer),
+        #                                          patches_resolution[1] // (2 ** i_layer)),
+        #                        depth=depths[i_layer],
+        #                        num_heads=num_heads[i_layer],
+        #                        window_size=window_size,
+        #                        mlp_ratio=self.mlp_ratio,
+        #                        qkv_bias=qkv_bias, qk_scale=qk_scale,
+        #                        drop=drop_rate, attn_drop=attn_drop_rate,
+        #                        downsample=PatchMerging if (i_layer < self.num_layers - 1) else None)
+        #     self.stages.append(stage)
+
+        self.norm = layers.LayerNormalization()
+        #self.avgpool = layers.AdaptiveAvgPool1d(1)
 
 
     def call(self, inputs, training=None, mask=None):
@@ -482,11 +505,15 @@ class SwinTransformer(Model):
 
     def forward_features(self, inputs):
         # (b, 224, 224, 3) -> (b, 56, 56, 96) -> (b, 3136, 96)
-        x, (H, W) = self.patch_embed(inputs)
+        x, (_, _) = self.patch_embed(inputs)
         if self.ape:
             x = x + self.absolute_pos_embed
         x = self.pos_drop(x)
 
+        #for stage in self.stages:
+            #x = stage(x)
+
+        #x = self.norm(x)
 
         return x
 
@@ -496,40 +523,15 @@ class SwinTransformer(Model):
 
 
 
-
-
 if __name__ == '__main__':
-    # # forward testing
-    # fake_images = tf.random.normal([4, 224, 224, 3])
-    # # build model
-    # swinTransformer = SwinTransformer(ape=True)
-    # # forward
-    # outputs = swinTransformer(fake_images)
-    # # print outputs
-    # print(outputs.shape)
-    import numpy as np
-
-    H, W = 8, 8
-    window_size = 2
-    shift_size = 1
-
-    # calculate attention mask for SW-MSA
-    img_mask = np.zeros((1, H, W, 1))  # 1 H W 1
-    h_slices = (slice(0, -window_size), slice(-window_size, -shift_size), slice(-shift_size, None))
-    w_slices = (slice(0, -window_size), slice(-window_size, -shift_size), slice(-shift_size, None))
-
-    cnt = 0
-    for h in h_slices:
-        for w in w_slices:
-            img_mask[:, h, w, :] = cnt
-            cnt += 1
-
-    mask_windows = window_partition(img_mask, H, W, window_size)  # nW, window_size, window_size, 1
-
-    mask_windows = tf.reshape(mask_windows, [-1, window_size*window_size])
-    attn_mask = tf.expand_dims(mask_windows, axis=1) - tf.expand_dims(mask_windows, axis=2)
-    attn_mask = tf.where(attn_mask!=0, float(-100.0), float(0.0))
-    print(attn_mask)
+    # forward testing
+    fake_images = tf.random.normal([4, 224, 224, 3])
+    # build model
+    swinTransformer = SwinTransformer(ape=True)
+    # forward
+    outputs = swinTransformer(fake_images)
+    # print outputs
+    print(outputs.shape)
 
 
 
